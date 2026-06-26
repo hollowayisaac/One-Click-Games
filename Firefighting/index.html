@@ -559,16 +559,13 @@ renderer.domElement.addEventListener('wheel', e => {
   userCam = true; userCamT = 0;
 }, { passive: true });
 renderer.domElement.addEventListener('touchstart', e => {
-  isDrag = true; lastMX = e.touches[0].clientX; lastMY = e.touches[0].clientY;
-  userCam = true; userCamT = 0;
+  if (gameOver) { restartGame(); return; }
+  mouseSpray = true;
 }, { passive: true });
 renderer.domElement.addEventListener('touchmove', e => {
-  if (!isDrag) return;
-  orbitTheta -= (e.touches[0].clientX - lastMX) * 0.006;
-  orbitPhi = Math.max(0.1, Math.min(Math.PI/2 - 0.05, orbitPhi - (e.touches[0].clientY - lastMY) * 0.005));
-  lastMX = e.touches[0].clientX; lastMY = e.touches[0].clientY; userCamT = 0;
-}, { passive: true });
-renderer.domElement.addEventListener('touchend', () => { isDrag = false; });
+  e.preventDefault();
+}, { passive: false });
+renderer.domElement.addEventListener('touchend', () => { mouseSpray = false; });
 
 // ── Game state ───────────────────────────────────────────────────────
 let score = 0, lives = 3, gameOver = false;
