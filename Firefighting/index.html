@@ -60,13 +60,13 @@ canvas { display:block; }
   <div id="title-box">🚒 FIRE RESCUE</div>
   <div id="lives-box" id="lval">❤️❤️❤️</div>
 </div>
-<div id="cam-hint">Drag to rotate • Scroll to zoom</div>
+<div id="cam-hint">Drag to rotate • Scroll / Right-drag to zoom</div>
 
 <div id="tank-wrap">
   <div id="tank-label">WATER TANK</div>
   <div id="tank-bg"><div id="tank-bar"></div></div>
 </div>
-<div id="hint">Hold <b>SPACEBAR</b> to spray water!</div>
+<div id="hint">Hold <b>SPACEBAR</b> or <b>LEFT CLICK</b> to spray water!</div>
 
 <div id="gameover">
   <h1>GAME OVER</h1>
@@ -522,20 +522,38 @@ function triggerExtinction(fx, fy, fz, bIdx) {
 
 // ── Orbit controls ───────────────────────────────────────────────────
 let orbitTheta = -0.3, orbitPhi = 0.55, orbitRadius = 45;
-let isDrag = false, lastMX = 0, lastMY = 0;
+let isDrag = false, rightDrag = false, lastMX = 0, lastMY = 0;
 let userCam = false, userCamT = 0;
 
+renderer.domElement.addEventListener('contextmenu', e => e.preventDefault());
 renderer.domElement.addEventListener('mousedown', e => {
-  isDrag = true; lastMX = e.clientX; lastMY = e.clientY;
-  userCam = true; userCamT = 0;
+  lastMX = e.clientX; lastMY = e.clientY;
+  if (e.button === 0) {
+    if (gameOver) { restartGame(); return; }
+    mouseSpray = true;
+  } else if (e.button === 2) {
+    rightDrag = true;
+    userCam = true; userCamT = 0;
+  }
 });
 window.addEventListener('mousemove', e => {
-  if (!isDrag) return;
-  orbitTheta -= (e.clientX - lastMX) * 0.006;
-  orbitPhi = Math.max(0.1, Math.min(Math.PI/2 - 0.05, orbitPhi - (e.clientY - lastMY) * 0.005));
-  lastMX = e.clientX; lastMY = e.clientY; userCamT = 0;
+  const dx = e.clientX - lastMX;
+  const dy = e.clientY - lastMY;
+  lastMX = e.clientX; lastMY = e.clientY;
+  if (isDrag) {
+    orbitTheta -= dx * 0.006;
+    orbitPhi = Math.max(0.1, Math.min(Math.PI/2 - 0.05, orbitPhi - dy * 0.005));
+    userCamT = 0;
+  }
+  if (rightDrag) {
+    orbitRadius = Math.max(12, Math.min(100, orbitRadius + dy * 0.2));
+    userCam = true; userCamT = 0;
+  }
 });
-window.addEventListener('mouseup', () => { isDrag = false; });
+window.addEventListener('mouseup', e => {
+  if (e.button === 0) { mouseSpray = false; }
+  if (e.button === 2) { rightDrag = false; }
+});
 renderer.domElement.addEventListener('wheel', e => {
   orbitRadius = Math.max(12, Math.min(100, orbitRadius + e.deltaY * 0.06));
   userCam = true; userCamT = 0;
@@ -554,7 +572,7 @@ renderer.domElement.addEventListener('touchend', () => { isDrag = false; });
 
 // ── Game state ───────────────────────────────────────────────────────
 let score = 0, lives = 3, gameOver = false;
-let spaceHeld = false, truckAngle = 0;
+let spaceHeld = false, mouseSpray = false, truckAngle = 0;
 let waterTank = 100, waterTimer = 0;
 let fireTimer = 0, fireInterval = 6;
 let flashTimer = 0;
@@ -590,7 +608,7 @@ function restartGame() {
   extincts.forEach(e => e.mat.color.setHex(e.orig));
   extincts.length = 0;
   buildingData.forEach(b => b.mat.color.setHex(b.origColor));
-  score = 0; lives = 3; gameOver = false; truckAngle = 0;
+  score = 0; lives = 3; gameOver = false; truckAngle = 0; mouseSpray = false;
   waterTank = 100; fireTimer = 0; fireInterval = 6;
   svalEl.textContent = '0'; setLives();
   gameoverEl.style.display = 'none';
@@ -647,7 +665,7 @@ function animate() {
   nozzle.getWorldPosition(npos);
   const outDir = new THREE.Vector3(sprayX, 0, sprayZ);
 
-  if (spaceHeld && waterTank > 0) {
+  if ((spaceHeld || mouseSpray) && waterTank > 0) {
     waterTank = Math.max(0, waterTank - WATER_DRAIN * dt);
     waterTimer += dt;
     while (waterTimer > 0.03) {
