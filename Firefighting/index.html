@@ -52,16 +52,37 @@ canvas { display:block; }
 #gameover .fin { font-size:32px; color:#ffd700; font-weight:bold; margin-bottom:28px; }
 #gameover .key { font-size:18px; color:#aaddff; }
 #gameover .key b { background:rgba(255,255,255,0.1); border:1px solid #aaddff; border-radius:6px; padding:2px 12px; }
+
+#popup-layer { position:absolute; inset:0; pointer-events:none; overflow:hidden; }
+
+#splash {
+  position:absolute; inset:0; display:flex; flex-direction:column;
+  align-items:center; justify-content:center;
+  background:rgba(0,0,0,0.82); z-index:200; cursor:pointer;
+}
+#splash h1 { font-size:64px; color:#ff6600; text-shadow:0 0 30px #ff4400, 0 4px 12px #000; margin-bottom:12px; }
+#splash .sub { font-size:22px; color:#fff; text-shadow:0 2px 8px #000; margin-bottom:48px; }
+#splash .tap { font-size:28px; color:#aaddff; border:2px solid #aaddff; border-radius:14px;
+  padding:18px 52px; text-shadow:0 0 12px #44aaff; box-shadow:0 0 24px rgba(68,170,255,0.4);
+  animation:pulse 1.4s ease-in-out infinite; }
+@keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.55;} }
 </style>
 </head>
 <body>
 
+<div id="splash">
+  <h1>🚒 FIRE RESCUE</h1>
+  <div class="sub">Protect the city from burning down!</div>
+  <div class="tap">TAP TO START</div>
+</div>
+
 <div id="hud">
   <div id="score-box">Score: <span id="sval">0</span></div>
-  <!-- VERSION: v1.0 — increment by 0.1 each time this file is updated via Claude Code -->
-  <div id="title-box">🚒 FIRE RESCUE <span style="font-size:14px;opacity:0.7;font-weight:normal;">v1.0</span></div>
+  <!-- VERSION: v1.4 — increment by 0.1 each time this file is updated via Claude Code -->
+  <div id="title-box">🚒 FIRE RESCUE <span style="font-size:14px;opacity:0.7;font-weight:normal;">v1.4</span></div>
   <div id="lives-box" id="lval">❤️❤️❤️</div>
 </div>
+<div id="popup-layer"></div>
 <div id="cam-hint">Drag to rotate • Scroll / Right-drag to zoom</div>
 
 <div id="tank-wrap">
@@ -529,21 +550,28 @@ function triggerExtinction(fx, fy, fz, bIdx) {
   if (bd) bd.mat.color.setHex(0xccffff);
   extincts.push({ mat: bd ? bd.mat : null, orig: bd ? bd.origColor : 0, t: 0, flashLight, ring });
 
-  // ── Floating score popup ──────────────────────────────────────────
-  const el = document.createElement('div');
-  el.textContent = '💧 +100 SAVED! 💧';
-  el.style.cssText = 'position:absolute;color:#88ffff;font-size:34px;font-weight:bold;text-shadow:0 0 20px #00aaff,0 0 40px #0066ff,0 2px 8px #000;pointer-events:none;z-index:99;transform:translateX(-50%);transition:transform 1.8s ease-out,opacity 1.8s ease-out;white-space:nowrap;';
-  document.body.appendChild(el);
+  // ── Floating score popup (uses pre-created pool — no DOM add/remove during gameplay) ──
+  const popup = popupPool.find(p => !p.inUse) || popupPool[0];
+  popup.inUse = true;
+  const pel = popup.el;
+  pel.style.transition = 'none';
+  pel.style.opacity = '1';
+  pel.style.transform = 'translateX(-50%)';
   const popPt = new THREE.Vector3(fx, fy + 4, fz);
   function pos() {
     const v = popPt.clone().project(camera);
-    el.style.left = ((v.x * 0.5 + 0.5) * innerWidth) + 'px';
-    el.style.top  = ((-v.y * 0.5 + 0.5) * innerHeight) + 'px';
+    pel.style.left = ((v.x * 0.5 + 0.5) * innerWidth) + 'px';
+    pel.style.top  = ((-v.y * 0.5 + 0.5) * innerHeight) + 'px';
   }
   pos();
-  setTimeout(() => { el.style.transform = 'translateX(-50%) translateY(-90px)'; el.style.opacity = '0'; }, 80);
-  const pid = setInterval(pos, 16);
-  setTimeout(() => { clearInterval(pid); el.remove(); }, 1900);
+  setTimeout(() => {
+    pel.style.transition = 'transform 1.8s ease-out, opacity 1.8s ease-out';
+    pel.style.transform = 'translateX(-50%) translateY(-90px)';
+    pel.style.opacity = '0';
+  }, 80);
+  if (popup.pid) clearInterval(popup.pid);
+  popup.pid = setInterval(pos, 16);
+  setTimeout(() => { clearInterval(popup.pid); popup.pid = null; popup.inUse = false; }, 1900);
 }
 
 // ── Orbit controls ───────────────────────────────────────────────────
@@ -593,6 +621,16 @@ renderer.domElement.addEventListener('touchmove', e => {
 }, { passive: false });
 renderer.domElement.addEventListener('touchend', () => { mouseSpray = false; });
 
+// ── Score popup pool (pre-created at startup so no DOM changes during gameplay) ──
+const popupLayer = document.getElementById('popup-layer');
+const popupPool = Array.from({ length: 8 }, () => {
+  const el = document.createElement('div');
+  el.textContent = '💧 +100 SAVED! 💧';
+  el.style.cssText = 'position:absolute;color:#88ffff;font-size:34px;font-weight:bold;text-shadow:0 0 20px #00aaff,0 0 40px #0066ff,0 2px 8px #000;pointer-events:none;transform:translateX(-50%);white-space:nowrap;opacity:0;';
+  popupLayer.appendChild(el);
+  return { el, inUse: false, pid: null };
+});
+
 // ── Game state ───────────────────────────────────────────────────────
 let score = 0, lives = 3, gameOver = false;
 let spaceHeld = false, mouseSpray = false, truckAngle = 0;
@@ -641,9 +679,25 @@ function restartGame() {
   spawnFire(); spawnFire();
 }
 
-// ── Start immediately ────────────────────────────────────────────────
-spawnFire();
-spawnFire();
+// ── Splash / fullscreen start ────────────────────────────────────────
+const splashEl = document.getElementById('splash');
+let gameStarted = false;
+
+function startGame() {
+  if (gameStarted) return;
+  gameStarted = true;
+  splashEl.style.display = 'none';
+  spawnFire(); spawnFire();
+}
+
+function tryFullscreen() {
+  const el = document.documentElement;
+  if (el.requestFullscreen) el.requestFullscreen().catch(() => {});
+  else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+}
+
+splashEl.addEventListener('click', () => { tryFullscreen(); startGame(); });
+splashEl.addEventListener('touchend', e => { e.preventDefault(); tryFullscreen(); startGame(); });
 
 // ── Clock & loop ─────────────────────────────────────────────────────
 const clock = new THREE.Clock();
@@ -653,7 +707,7 @@ function animate() {
   const dt = Math.min(clock.getDelta(), 0.05);
   const t  = clock.getElapsedTime();
 
-  if (gameOver) { renderer.render(scene, camera); return; }
+  if (!gameStarted || gameOver) { renderer.render(scene, camera); return; }
 
   // Truck movement
   truckAngle += TRUCK_SPD * dt;
