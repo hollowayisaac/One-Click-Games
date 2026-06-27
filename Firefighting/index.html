@@ -6,7 +6,8 @@
 <title>Fire Rescue 3D</title>
 <style>
 * { margin:0; padding:0; box-sizing:border-box; user-select:none; -webkit-user-select:none; }
-body { background:#000; overflow:hidden; font-family:Arial,sans-serif; -webkit-touch-callout:none; }
+html { overflow:hidden; width:100%; height:100%; }
+body { background:#000; overflow:hidden; font-family:Arial,sans-serif; -webkit-touch-callout:none; width:100%; height:100%; }
 canvas { display:block; }
 
 #hud {
@@ -857,7 +858,10 @@ function animate() {
 
 animate();
 
+let _vw = innerWidth, _vh = innerHeight;
 window.addEventListener('resize', () => {
+  if (innerWidth === _vw && innerHeight === _vh) return;
+  _vw = innerWidth; _vh = innerHeight;
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
